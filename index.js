@@ -67,7 +67,7 @@ async function askBibleQuestion(question) {
 
 // 機器人啟動事件
 client.once('ready', () => {
-  console.log(`✅ 聖經問答機器人已啟動：${client.user.tag}`);
+  console.log(`✅ Theologian 神學家機器人已啟動：${client.user.tag}`);
   client.user.setActivity('📖 回答聖經問題', { type: 'LISTENING' });
 });
 
@@ -85,7 +85,7 @@ client.on('messageCreate', async (message) => {
   if (!question) {
     const helpEmbed = new EmbedBuilder()
       .setColor('#0099ff')
-      .setTitle('📖 聖經問答機器人')
+      .setTitle('📖 Theologian 神學家機器人')
       .setDescription('使用方法：`![你的問題]`')
       .addFields(
         { 
@@ -112,7 +112,7 @@ client.on('messageCreate', async (message) => {
     // 建立回答的 Embed
     const answerEmbed = new EmbedBuilder()
       .setColor('#FFD700')
-      .setTitle('📖 聖經問答')
+      .setTitle('📖 Theologian 回答')
       .addFields(
         { 
           name: '❓ 問題', 
@@ -183,4 +183,4 @@ process.on('uncaughtException', (error) => {
 // 啟動機器人
 client.login(process.env.DISCORD_TOKEN);
 
-console.log('🚀 正在啟動聖經問答機器人...');
+console.log('🚀 正在啟動 Theologian 神學家機器人...');
