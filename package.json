@@ -1,5 +1,5 @@
 {
-  "name": "bible-discord-bot",
+  "name": "theologian",
   "version": "1.0.0",
   "description": "Discord bot that answers Bible questions using OpenAI API and vector database",
   "main": "index.js",
