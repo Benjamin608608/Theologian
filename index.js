@@ -37,10 +37,11 @@ async function askBibleQuestion(question) {
 1. 優先使用向量資料庫中的聖經內容作為回答依據
 2. 準確引用聖經章節（書卷、章、節）
 3. 用繁體中文回答
-4. 回答要簡潔明確，適合 Discord 聊天室顯示
-5. 如果資料庫中沒有直接相關內容，請說明並提供最相關的聖經教導
-6. 保持謙遜和尊重的語調
-7. 回答長度控制在 1500 字以內
+4. 回答要自然、簡潔，就像一個熟悉聖經的朋友在對話
+5. 不要提及「資料庫」或「系統」等技術詞彙
+6. 不要使用過於正式的格式，保持對話式語調
+7. 如果資料庫中沒有直接相關內容，提供最相關的聖經教導
+8. 回答長度適中，避免過於冗長
 
 用戶問題：${question}`
         },
@@ -49,8 +50,8 @@ async function askBibleQuestion(question) {
           content: question
         }
       ],
-      max_tokens: 1500,
-      temperature: 0.3, // 較低的溫度以確保準確性
+      max_tokens: 1000,
+      temperature: 0.4, // 稍微提高溫度讓回答更自然
       // 如果您的 API 支援 prompt ID，請取消註解以下行
       // prompt: {
       //   id: BIBLE_PROMPT_ID,
@@ -102,71 +103,32 @@ client.on('messageCreate', async (message) => {
     return message.reply({ embeds: [helpEmbed] });
   }
 
-  // 顯示處理中的訊息
-  const processingMessage = await message.reply('🔍 正在查詢聖經資料庫...');
-
   try {
     // 使用您的 API 和向量資料庫獲取回答
     const answer = await askBibleQuestion(question);
 
-    // 建立回答的 Embed
-    const answerEmbed = new EmbedBuilder()
-      .setColor('#FFD700')
-      .setTitle('📖 Theologian 回答')
-      .addFields(
-        { 
-          name: '❓ 問題', 
-          value: `\`\`\`${question}\`\`\``,
-          inline: false 
-        },
-        { 
-          name: '💡 回答', 
-          value: answer.length > 1000 ? answer.substring(0, 1000) + '...' : answer,
-          inline: false 
-        }
-      )
-      .setFooter({ 
-        text: '資料來源：聖經向量資料庫 | 願主賜福您！',
-        iconURL: 'https://cdn.discordapp.com/emojis/📖.png'
-      })
-      .setTimestamp();
-
     // 如果回答太長，分成多個訊息
-    if (answer.length > 1000) {
+    if (answer.length > 2000) {
       const chunks = [];
-      for (let i = 0; i < answer.length; i += 1000) {
-        chunks.push(answer.slice(i, i + 1000));
+      for (let i = 0; i < answer.length; i += 2000) {
+        chunks.push(answer.slice(i, i + 2000));
       }
 
-      await processingMessage.edit({ embeds: [answerEmbed] });
+      // 發送第一個部分
+      await message.reply(chunks[0]);
       
       // 發送剩餘的內容
       for (let i = 1; i < chunks.length; i++) {
-        const continueEmbed = new EmbedBuilder()
-          .setColor('#FFD700')
-          .setDescription(chunks[i])
-          .setFooter({ text: `續... (${i + 1}/${chunks.length})` });
-        
-        await message.channel.send({ embeds: [continueEmbed] });
+        await message.channel.send(chunks[i]);
       }
     } else {
-      await processingMessage.edit({ embeds: [answerEmbed] });
+      // 直接回覆答案
+      await message.reply(answer);
     }
 
   } catch (error) {
     console.error('處理聖經問題時發生錯誤:', error);
-    
-    const errorEmbed = new EmbedBuilder()
-      .setColor('#FF0000')
-      .setTitle('❌ 發生錯誤')
-      .setDescription('抱歉，在處理您的問題時發生了錯誤。請稍後再試。')
-      .addFields({
-        name: '可能的原因',
-        value: '• API 連線問題\n• 問題格式不正確\n• 服務暫時無法使用'
-      })
-      .setFooter({ text: '如果問題持續，請聯繫管理員' });
-
-    await processingMessage.edit({ embeds: [errorEmbed] });
+    await message.reply('抱歉，我無法回答這個問題。');
   }
 });
 
