@@ -25,13 +25,39 @@ const BIBLE_PROMPT_ID = "pmpt_687768773ff08197b43cd4019dea57350c6d0ed08a1126d1";
 // 使用您的 API 和向量資料庫回答聖經問題
 async function askBibleQuestion(question) {
   try {
-    // 使用您的 prompt ID 和向量資料庫
-    const response = await openai.chat.completions.create({
-      model: "gpt-4", // 或您偏好的模型
-      messages: [
-        {
-          role: "system",
-          content: `你是一個專業的聖經問答助手，請根據向量資料庫中的聖經內容來回答問題。
+    console.log(`🤖 調用 OpenAI Responses API for: ${question.substring(0, 50)}...`);
+    
+    // 構建完整輸入
+    const fullInput = `用戶問題: ${question}
+
+請以專業的聖經問答助手身份用繁體中文回應。這是一個即時對話，請直接回答問題，不要使用書信格式。`;
+
+    let response;
+    try {
+      console.log(`🔍 使用 Prompt ID: ${BIBLE_PROMPT_ID}`);
+      
+      // 使用 Responses API 與您的 Prompt ID
+      response = await openai.responses.create({
+        model: "gpt-4o", // 使用支援 Responses API 的模型
+        input: fullInput,
+        instructions: `使用 Prompt ID: ${BIBLE_PROMPT_ID} 版本: 1。基於向量資料庫中的聖經內容回答問題。這是即時對話，請直接回答問題，不要使用書信格式、開頭稱呼語、結尾祝福語或署名。像朋友對話一樣自然回應。`,
+        max_output_tokens: 1000,
+        temperature: 0.4
+      });
+      
+      console.log('✅ Responses API 調用成功');
+      
+    } catch (responsesError) {
+      console.log('🔄 Responses API 失敗，使用備用方法...');
+      console.error('Responses API 錯誤:', responsesError.message);
+      
+      // 備用方法：使用 Chat Completions API
+      response = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: `你是一個專業的聖經問答助手，請根據向量資料庫中的聖經內容來回答問題。
 
 重要指示：
 1. 優先使用向量資料庫中的聖經內容作為回答依據
@@ -43,25 +69,39 @@ async function askBibleQuestion(question) {
 7. 如果資料庫中沒有直接相關內容，提供最相關的聖經教導
 8. 回答長度適中，避免過於冗長
 
-用戶問題：${question}`
-        },
-        {
-          role: "user",
-          content: question
-        }
-      ],
-      max_tokens: 1000,
-      temperature: 0.4, // 稍微提高溫度讓回答更自然
-      // 如果您的 API 支援 prompt ID，請取消註解以下行
-      // prompt: {
-      //   id: BIBLE_PROMPT_ID,
-      //   version: "1"
-      // }
-    });
+Prompt 參考 ID: ${BIBLE_PROMPT_ID}
+版本: 1`
+          },
+          {
+            role: "user",
+            content: fullInput
+          }
+        ],
+        max_tokens: 1000,
+        temperature: 0.4
+      });
+      
+      console.log('✅ Chat Completions API 調用成功');
+    }
 
-    return response.choices[0].message.content;
+    // 處理不同 API 的回應格式
+    let responseContent;
+    
+    if (response.output_text) {
+      // Responses API 格式
+      responseContent = response.output_text;
+    } else if (response.choices?.[0]?.message?.content) {
+      // Chat Completions API 格式
+      responseContent = response.choices[0].message.content;
+    } else {
+      console.log('🔍 未知回應格式:', JSON.stringify(response, null, 2));
+      responseContent = null;
+    }
+
+    return responseContent;
+    
   } catch (error) {
-    console.error('OpenAI API 錯誤:', error);
+    console.error('OpenAI API 調用失敗:', error);
     throw error;
   }
 }
