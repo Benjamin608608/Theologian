@@ -30,7 +30,7 @@ async function askBibleQuestion(question) {
     // 構建完整輸入
     const fullInput = `用戶問題: ${question}
 
-請以專業的聖經問答助手身份用繁體中文回應。這是一個即時對話，請直接回答問題，不要使用書信格式。`;
+請以專業的資料問答助手身份用繁體中文回應。這是一個即時對話，請直接回答問題，不要使用書信格式。`;
 
     let response;
     try {
@@ -40,7 +40,7 @@ async function askBibleQuestion(question) {
       response = await openai.responses.create({
         model: "gpt-4o", // 使用支援 Responses API 的模型
         input: fullInput,
-        instructions: `使用 Prompt ID: ${BIBLE_PROMPT_ID} 版本: 1。基於向量資料庫中的聖經內容回答問題。這是即時對話，請直接回答問題，不要使用書信格式、開頭稱呼語、結尾祝福語或署名。像朋友對話一樣自然回應。`,
+        instructions: `使用 Prompt ID: ${BIBLE_PROMPT_ID} 版本: 1。基於向量資料庫中的內容回答問題。這是即時對話，請直接回答問題，不要使用書信格式、開頭稱呼語、結尾祝福語或署名。像朋友對話一樣自然回應。`,
         max_output_tokens: 1000,
         temperature: 0.4
       });
