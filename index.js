@@ -221,16 +221,22 @@ client.on('messageCreate', async (message) => {
     // 等待完成 - 改良版等待機制
     let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
     let attempts = 0;
-    const maxAttempts = 30; // 最多等待 30 秒
+    const maxAttempts = 60; // 增加到 60 秒
 
     while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
       attempts++;
       
-      // 更新狀態訊息
-      if (attempts % 5 === 0) {
+      // 更新狀態訊息，讓用戶知道還在處理中
+      if (attempts === 10) {
         await thinkingMessage.edit('🔍 深度搜索資料庫中...');
+      } else if (attempts === 20) {
+        await thinkingMessage.edit('📚 分析文件內容中...');
+      } else if (attempts === 35) {
+        await thinkingMessage.edit('✍️ 整理回答中...');
+      } else if (attempts === 50) {
+        await thinkingMessage.edit('⏳ 即將完成...');
       }
     }
 
@@ -239,7 +245,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (attempts >= maxAttempts) {
-      throw new Error('Request timeout - please try again');
+      throw new Error('查詢時間過長，請嘗試簡化您的問題或稍後再試');
     }
 
     // 獲取回答
@@ -286,7 +292,7 @@ client.on('messageCreate', async (message) => {
     // 創建 Discord Embed
     const embed = new EmbedBuilder()
       .setColor(0x0099FF)
-      .setTitle('📋 查詢結果')
+      .setTitle('📋 神學知識庫查詢結果')
       .setDescription(botAnswer.length > 4000 ? botAnswer.substring(0, 4000) + '...' : botAnswer)
       .setFooter({ 
         text: '資料來源：神學知識庫',
@@ -305,10 +311,12 @@ client.on('messageCreate', async (message) => {
     
     let errorMessage = '很抱歉，處理您的問題時發生錯誤，請稍後再試。';
     
-    if (error.message.includes('timeout')) {
-      errorMessage = '查詢時間過長，請嘗試簡化您的問題或稍後再試。';
+    if (error.message.includes('查詢時間過長') || error.message.includes('timeout')) {
+      errorMessage = '⏰ 查詢時間過長，這可能是因為問題較為複雜。\n請嘗試：\n• 簡化您的問題\n• 分成幾個小問題詢問\n• 稍後再試';
     } else if (error.message.includes('rate limit')) {
-      errorMessage = '目前請求過多，請稍後再試。';
+      errorMessage = '🚫 目前請求過多，請稍後再試。';
+    } else if (error.message.includes('Assistant run failed')) {
+      errorMessage = '🔧 系統處理問題，請稍後再試或聯繫管理員。';
     }
     
     const errorEmbed = new EmbedBuilder()
