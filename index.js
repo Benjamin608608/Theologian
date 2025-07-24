@@ -129,24 +129,6 @@ function createSourceList(sourceMap) {
   return sourceList;
 }
 
-// 解析回答中的引用資訊
-async function parseAnnotations(messageContent) {
-  const sources = new Set();
-  
-  // 檢查 annotations（引用標註）
-  if (messageContent.annotations && messageContent.annotations.length > 0) {
-    for (const annotation of messageContent.annotations) {
-      if (annotation.type === 'file_citation' && annotation.file_citation) {
-        const fileId = annotation.file_citation.file_id;
-        const fileName = await getFileName(fileId);
-        sources.add(fileName);
-      }
-    }
-  }
-  
-  return Array.from(sources);
-}
-
 // 機器人就緒事件
 client.once('ready', () => {
   console.log(`✅ Bot is ready! Logged in as ${client.user.tag}`);
@@ -248,11 +230,10 @@ client.on('messageCreate', async (message) => {
       throw new Error('查詢時間過長，請嘗試簡化您的問題或稍後再試');
     }
 
-    // 獲取回答
+    // 獲取回答並處理引用
     const threadMessages = await openai.beta.threads.messages.list(thread.id);
     const responseMessage = threadMessages.data[0];
     
-    // 提取文字內容
     let botAnswer = '';
     if (responseMessage.content && responseMessage.content.length > 0) {
       const textContent = responseMessage.content.find(content => content.type === 'text');
@@ -272,14 +253,14 @@ client.on('messageCreate', async (message) => {
           botAnswer += sourceList;
         } else {
           // 如果沒有具體引用，顯示資料庫來源
-          botAnswer += `\n\n📚 **資料來源：** ${selectedStore.name}`;
+          botAnswer += `\n\n📚 **資料來源：** 神學知識庫`;
         }
       }
     }
 
     // 如果沒有獲取到回答
     if (!botAnswer) {
-      botAnswer = '很抱歉，我在資料庫中找不到相關資訊來回答這個問題。';
+      botAnswer = '很抱歉，我在資料庫中找不到相關資訊來回答這個問題。\n\n📚 **資料來源：** 神學知識庫';
     }
 
     // 清理資源
