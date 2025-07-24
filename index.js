@@ -17,8 +17,7 @@ const client = new Client({
 
 // 你的向量資料庫 IDs
 const VECTOR_STORE_IDS = [
-  'vs_68807d717dec81918784b11f7b7aad80',
-  'vs_6875bbd3e120819188d4f563f9ff1f90'
+  'vs_68807d717dec81918784b11f7b7aad80'
 ];
 
 // 機器人就緒事件
