@@ -49,13 +49,11 @@ client.on('messageCreate', async (message) => {
     // 顯示正在處理的訊息
     const thinkingMessage = await message.reply('🤔 讓我查找相關資料...');
 
-    // 使用 OpenAI 的 RAG 功能搜索和回答
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // 或使用 'gpt-4'
-      messages: [
-        {
-          role: 'system',
-          content: `你是一個專業的助手，只能根據提供的知識庫資料來回答問題。
+    // 創建助手來使用向量搜索
+    const assistant = await openai.beta.assistants.create({
+      model: 'gpt-4o-mini',
+      name: 'RAG Assistant',
+      instructions: `你是一個專業的助手，只能根據提供的知識庫資料來回答問題。
 
 重要規則：
 1. 只使用檢索到的資料來回答問題
@@ -66,28 +64,53 @@ client.on('messageCreate', async (message) => {
 
 格式要求：
 - 回答問題內容
-- 在末尾加上「📚 資料來源：[來源資訊]」`
-        },
-        {
-          role: 'user',
-          content: question
+- 在末尾加上「📚 資料來源：向量資料庫」`,
+      tools: [{ type: 'file_search' }],
+      tool_resources: {
+        file_search: {
+          vector_store_ids: [VECTOR_STORE_ID]
         }
-      ],
-      tools: [
-        {
-          type: 'file_search',
-          file_search: {
-            vector_store_ids: [VECTOR_STORE_ID]
-          }
-        }
-      ],
-      tool_choice: 'auto',
-      max_tokens: 1000,
-      temperature: 0.3
+      }
     });
 
+    // 創建對話線程
+    const thread = await openai.beta.threads.create();
+
+    // 發送用戶訊息
+    await openai.beta.threads.messages.create(thread.id, {
+      role: 'user',
+      content: question
+    });
+
+    // 執行助手
+    const run = await openai.beta.threads.runs.create(thread.id, {
+      assistant_id: assistant.id
+    });
+
+    // 等待完成
+    let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    while (runStatus.status !== 'completed' && runStatus.status !== 'failed') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+    }
+
+    if (runStatus.status === 'failed') {
+      throw new Error('Assistant run failed');
+    }
+
     // 獲取回答
-    const answer = response.choices[0].message.content;
+    const messages = await openai.beta.threads.messages.list(thread.id);
+    const answer = messages.data[0].content[0].text.value;
+
+    // 清理資源
+    await openai.beta.assistants.del(assistant.id);
+
+    // 獲取回答
+    const messages = await openai.beta.threads.messages.list(thread.id);
+    const answer = messages.data[0].content[0].text.value;
+
+    // 清理資源
+    await openai.beta.assistants.del(assistant.id);
     
     // 創建 Discord Embed
     const embed = new EmbedBuilder()
