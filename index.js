@@ -100,14 +100,7 @@ client.on('messageCreate', async (message) => {
 
     // 獲取回答
     const threadMessages = await openai.beta.threads.messages.list(thread.id);
-    const answer = threadMessages.data[0].content[0].text.value;
-
-    // 清理資源
-    await openai.beta.assistants.del(assistant.id);
-
-    // 獲取回答
-    const messages = await openai.beta.threads.messages.list(thread.id);
-    const answer = messages.data[0].content[0].text.value;
+    const botAnswer = threadMessages.data[0].content[0].text.value;
 
     // 清理資源
     await openai.beta.assistants.del(assistant.id);
@@ -116,7 +109,7 @@ client.on('messageCreate', async (message) => {
     const embed = new EmbedBuilder()
       .setColor(0x0099FF)
       .setTitle('📋 查詢結果')
-      .setDescription(answer)
+      .setDescription(botAnswer)
       .setFooter({ 
         text: '資料來源：向量資料庫',
         iconURL: client.user.displayAvatarURL()
