@@ -20,11 +20,13 @@ const VECTOR_STORES = {
   primary: 'vs_68807d717dec81918784b11f7b7aad80'
 };
 
+// 設定：是否使用詳細引用模式
+const USE_DETAILED_CITATIONS = true; // 設為 false 可回到簡單模式
+
 // 選擇向量資料庫的函數
 function selectVectorStore(question) {
   const keywords = question.toLowerCase();
   
-  // 如果問題包含特定關鍵字，使用第二個資料庫
   if (keywords.includes('歷史') || keywords.includes('教會史') || keywords.includes('early church')) {
     return {
       id: VECTOR_STORES.secondary,
@@ -32,7 +34,6 @@ function selectVectorStore(question) {
     };
   }
   
-  // 默認使用主要資料庫
   return {
     id: VECTOR_STORES.primary,
     name: '主要資料庫'
@@ -50,27 +51,91 @@ async function getFileName(fileId) {
   }
 }
 
-// 解析回答中的引用資訊
-async function parseAnnotations(messageContent) {
-  const sources = new Set();
+// 詳細引用處理函數
+async function processDetailedCitations(text, annotations) {
+  if (!annotations || annotations.length === 0) {
+    return { text, citations: [] };
+  }
+
+  let processedText = text;
+  const citations = [];
   
-  // 檢查 annotations（引用標註）
-  if (messageContent.annotations && messageContent.annotations.length > 0) {
-    for (const annotation of messageContent.annotations) {
-      if (annotation.type === 'file_citation' && annotation.file_citation) {
-        const fileId = annotation.file_citation.file_id;
-        const fileName = await getFileName(fileId);
-        sources.add(fileName);
+  // 處理每個引用
+  for (let i = 0; i < annotations.length; i++) {
+    const annotation = annotations[i];
+    
+    if (annotation.type === 'file_citation' && annotation.file_citation) {
+      const fileId = annotation.file_citation.file_id;
+      const fileName = await getFileName(fileId);
+      const quote = annotation.file_citation.quote || '';
+      
+      // 記錄引用資訊
+      citations.push({
+        index: i + 1,
+        fileName,
+        quote,
+        fileId
+      });
+      
+      // 替換引用標記
+      if (annotation.text) {
+        const citationMark = `^[${i + 1}]`;
+        processedText = processedText.replace(annotation.text, annotation.text + citationMark);
       }
     }
   }
   
-  return Array.from(sources);
+  return { text: processedText, citations };
+}
+
+// 簡單引用處理函數
+function processSimpleCitations(text, annotations) {
+  // 清理所有引用標記
+  let cleanText = text
+    .replace(/【[^】]*】/g, '')
+    .replace(/†[^†\s]*†?/g, '')
+    .replace(/\d+:\d+†[^†\s]*†?/g, '')
+    .replace(/\[\d+\]/g, '')
+    .replace(/\(\d+\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+    
+  // 提取唯一的文件來源
+  const sources = new Set();
+  if (annotations && annotations.length > 0) {
+    annotations.forEach(annotation => {
+      if (annotation.type === 'file_citation' && annotation.file_citation) {
+        sources.add(annotation.file_citation.file_id);
+      }
+    });
+  }
+  
+  return { text: cleanText, fileIds: Array.from(sources) };
+}
+
+// 創建引用格式
+function formatCitations(citations) {
+  if (citations.length === 0) return '';
+  
+  let result = '\n\n📚 **引用來源：**\n';
+  citations.forEach(citation => {
+    result += `**[${citation.index}]** ${citation.fileName}`;
+    if (citation.quote && citation.quote.length > 0) {
+      const shortQuote = citation.quote.length > 150 
+        ? citation.quote.substring(0, 150) + '...' 
+        : citation.quote;
+      result += `\n    └ *"${shortQuote}"*`;
+    }
+    result += '\n';
+  });
+  
+  return result;
 }
 
 // 機器人就緒事件
 client.once('ready', () => {
   console.log(`✅ Bot is ready! Logged in as ${client.user.tag}`);
+  console.log(`📖 Citation mode: ${USE_DETAILED_CITATIONS ? 'Detailed' : 'Simple'}`);
 });
 
 // 訊息處理
@@ -102,7 +167,7 @@ client.on('messageCreate', async (message) => {
     // 選擇合適的向量資料庫
     const selectedStore = selectVectorStore(question);
     
-    // 創建助手來使用向量搜索
+    // 創建助手
     const assistant = await openai.beta.assistants.create({
       model: 'gpt-4o-mini',
       name: 'Theology RAG Assistant',
@@ -113,13 +178,12 @@ client.on('messageCreate', async (message) => {
 2. 如果資料庫中沒有相關資訊，請明確說明「很抱歉，我在資料庫中找不到相關資訊來回答這個問題」
 3. 回答要準確、簡潔且有幫助
 4. 使用繁體中文回答
-5. 專注於提供基於資料庫內容的準確資訊
-6. 盡可能引用具體的資料片段
+5. 當引用具體內容時，要精確且有依據
 
 格式要求：
 - 直接回答問題內容
-- 引用相關的資料片段（如果有的話）
-- 不需要在回答中手動添加資料來源，系統會自動處理`,
+- 引用相關的資料片段
+- 系統會自動處理資料來源標註`,
       tools: [{ type: 'file_search' }],
       tool_resources: {
         file_search: {
@@ -128,31 +192,27 @@ client.on('messageCreate', async (message) => {
       }
     });
 
-    // 創建對話線程
+    // 創建對話線程並執行
     const thread = await openai.beta.threads.create();
-
-    // 發送用戶訊息
     await openai.beta.threads.messages.create(thread.id, {
       role: 'user',
       content: question
     });
 
-    // 執行助手
     const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: assistant.id
     });
 
-    // 等待完成 - 改良版等待機制
+    // 等待完成
     let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
     let attempts = 0;
-    const maxAttempts = 30; // 最多等待 30 秒
+    const maxAttempts = 30;
 
     while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
       attempts++;
       
-      // 更新狀態訊息
       if (attempts % 5 === 0) {
         await thinkingMessage.edit('🔍 深度搜索資料庫中...');
       }
@@ -166,30 +226,39 @@ client.on('messageCreate', async (message) => {
       throw new Error('Request timeout - please try again');
     }
 
-    // 獲取回答
+    // 獲取回答並處理引用
     const threadMessages = await openai.beta.threads.messages.list(thread.id);
     const responseMessage = threadMessages.data[0];
     
-    // 提取文字內容
     let botAnswer = '';
     if (responseMessage.content && responseMessage.content.length > 0) {
       const textContent = responseMessage.content.find(content => content.type === 'text');
       if (textContent) {
-        botAnswer = textContent.text.value;
-        
-        // 解析引用的文件來源
-        const sources = await parseAnnotations(textContent.text);
-        
-        // 添加資料來源資訊
-        if (sources.length > 0) {
-          botAnswer += `\n\n📚 **資料來源：**\n${sources.map(source => `• ${source}`).join('\n')}`;
+        if (USE_DETAILED_CITATIONS) {
+          // 詳細引用模式
+          const { text, citations } = await processDetailedCitations(
+            textContent.text.value, 
+            textContent.text.annotations
+          );
+          botAnswer = text + formatCitations(citations);
         } else {
-          botAnswer += `\n\n📚 **資料來源：** ${selectedStore.name}`;
+          // 簡單引用模式
+          const { text, fileIds } = processSimpleCitations(
+            textContent.text.value, 
+            textContent.text.annotations
+          );
+          botAnswer = text;
+          
+          if (fileIds.length > 0) {
+            const fileNames = await Promise.all(fileIds.map(getFileName));
+            botAnswer += `\n\n📚 **資料來源：**\n${fileNames.map(name => `• ${name}`).join('\n')}`;
+          } else {
+            botAnswer += `\n\n📚 **資料來源：** ${selectedStore.name}`;
+          }
         }
       }
     }
 
-    // 如果沒有獲取到回答
     if (!botAnswer) {
       botAnswer = '很抱歉，我在資料庫中找不到相關資訊來回答這個問題。';
     }
@@ -204,15 +273,14 @@ client.on('messageCreate', async (message) => {
     // 創建 Discord Embed
     const embed = new EmbedBuilder()
       .setColor(0x0099FF)
-      .setTitle('📋 神學知識庫查詢結果')
+      .setTitle('📋 查詢結果')
       .setDescription(botAnswer.length > 4000 ? botAnswer.substring(0, 4000) + '...' : botAnswer)
       .setFooter({ 
-        text: `搜索於：${selectedStore.name}`,
+        text: `搜索於：${selectedStore.name} | 引用模式：${USE_DETAILED_CITATIONS ? '詳細' : '簡單'}`,
         iconURL: client.user.displayAvatarURL()
       })
       .setTimestamp();
 
-    // 編輯原本的"思考中"訊息
     await thinkingMessage.edit({ 
       content: null, 
       embeds: [embed] 
