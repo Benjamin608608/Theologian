@@ -1,125 +1,111 @@
-# 📖 聖經問答 Discord 機器人
+# Discord RAG Bot - Railway 部署指南
 
-一個基於 OpenAI API 和向量資料庫的 Discord 機器人，專門用於回答聖經相關問題。
+## 📋 前置準備
 
-## ✨ 功能特色
-
-- 🤖 使用 OpenAI API 和完整聖經向量資料庫
-- 📚 準確的聖經章節引用
-- 🎯 符合基督教教義的回答
-- 🌐 支援繁體中文
-- ⚡ 快速回應
-
-## 🚀 使用方法
-
-在 Discord 中使用 `!` 開頭來提問：
-
-```
-!耶穌是誰？
-!什麼是愛？
-!如何禱告？
-!約翰福音 3:16 的意思
-!大衛王的故事
-```
-
-## 🛠️ 本地開發設定
-
-### 1. 克隆專案
-```bash
-git clone https://github.com/yourusername/bible-discord-bot.git
-cd bible-discord-bot
-```
-
-### 2. 安裝依賴
-```bash
-npm install
-```
-
-### 3. 設定環境變數
-複製 `.env.example` 為 `.env` 並填入您的 API 金鑰：
-
-```bash
-cp .env.example .env
-```
-
-編輯 `.env` 檔案：
-```
-DISCORD_TOKEN=your_discord_bot_token_here
-OPENAI_API_KEY=your_openai_api_key_here
-```
-
-### 4. 啟動機器人
-```bash
-npm start
-```
-
-## 🚢 Railway 部署
-
-### 1. 準備 GitHub 儲存庫
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
-```
-
-### 2. 在 Railway 部署
-1. 前往 [Railway](https://railway.app/)
-2. 點擊「New Project」
-3. 選擇「Deploy from GitHub repo」
-4. 選擇您的儲存庫
-5. 設定環境變數：
-   - `DISCORD_TOKEN`: 您的 Discord 機器人 Token
-   - `OPENAI_API_KEY`: 您的 OpenAI API 金鑰
-
-### 3. 自動部署
-Railway 會自動偵測 `package.json` 並執行部署。
-
-## 🔧 獲取 API 金鑰
-
-### Discord Bot Token
+### 1. Discord Bot 設定
 1. 前往 [Discord Developer Portal](https://discord.com/developers/applications)
-2. 建立新的 Application
-3. 在 Bot 部分建立機器人並複製 Token
-4. 在 OAuth2 > URL Generator 中選擇 `bot` 和所需權限
-5. 使用生成的 URL 邀請機器人到您的伺服器
+2. 創建新應用程式並建立 Bot
+3. 複製 Bot Token
+4. 設定 Bot 權限：
+   - Send Messages
+   - Use Slash Commands
+   - Embed Links
+   - Read Message History
+   - Add Reactions
 
-### OpenAI API Key
-1. 前往 [OpenAI Platform](https://platform.openai.com/)
-2. 建立帳戶並前往 API Keys 部分
-3. 建立新的 API Key
+### 2. OpenAI API 設定
+1. 確保你的 OpenAI API Key 有效
+2. 確認向量資料庫 ID：`pmpt_687768773ff08197b43cd4019dea57350c6d0ed08a1126d1`
 
-## 📝 所需權限
+## 🚀 Railway 部署步驟
 
-機器人需要以下 Discord 權限：
-- `Send Messages`
-- `Read Message History`
-- `Use Slash Commands`
-- `Embed Links`
+### 1. GitHub 準備
+```bash
+# 初始化 Git 倉庫
+git init
+git add .
+git commit -m "Initial commit: Discord RAG Bot"
+
+# 推送到 GitHub
+git remote add origin https://github.com/yourusername/discord-rag-bot.git
+git push -u origin main
+```
+
+### 2. Railway 設定
+1. 前往 [Railway](https://railway.app/)
+2. 使用 GitHub 帳號登入
+3. 點擊 "New Project"
+4. 選擇 "Deploy from GitHub repo"
+5. 選擇您的倉庫
+
+### 3. 環境變數設定
+在 Railway 專案設定中加入以下環境變數：
+
+```
+DISCORD_TOKEN=你的Discord機器人Token
+OPENAI_API_KEY=你的OpenAI_API金鑰
+NODE_ENV=production
+```
+
+### 4. 部署設定
+Railway 會自動偵測到 `package.json` 並使用 Node.js 環境。確保你的 `package.json` 中有正確的 `start` 腳本。
+
+## 📁 專案結構
+```
+discord-rag-bot/
+├── index.js          # 主要機器人程式碼
+├── package.json      # Node.js 依賴設定
+├── .env.example      # 環境變數範例
+├── .gitignore        # Git 忽略檔案
+└── README.md         # 專案說明
+```
+
+## 🔧 功能特色
+
+### 主要功能
+- ✅ 只使用向量資料庫中的資料回答問題
+- ✅ 自動附上資料來源
+- ✅ 支援提及(@bot)和私訊
+- ✅ 美觀的 Discord Embed 回應
+- ✅ 錯誤處理和狀態提示
+
+### 使用方式
+1. **提及機器人**：在頻道中 `@BotName 你的問題`
+2. **私訊**：直接傳送訊息給機器人
+
+### 安全性
+- 環境變數管理敏感資訊
+- 完整的錯誤處理
+- 只使用授權的資料來源
 
 ## 🐛 故障排除
 
 ### 常見問題
-1. **機器人無回應**：檢查 Token 是否正確且機器人有適當權限
-2. **API 錯誤**：確認 OpenAI API Key 有效且有足夠額度
-3. **部署失敗**：檢查環境變數是否正確設定
+1. **機器人沒有回應**
+   - 檢查 Discord Token 是否正確
+   - 確認機器人有必要權限
+   - 查看 Railway 日誌
 
-### 查看日誌
-```bash
-# 本地開發
-npm start
+2. **OpenAI 錯誤**
+   - 驗證 API Key 是否有效
+   - 檢查向量資料庫 ID
+   - 確認 API 配額充足
 
-# Railway 部署
-在 Railway 控制台查看部署日誌
-```
+3. **部署失敗**
+   - 檢查 package.json 語法
+   - 確認環境變數設定
+   - 查看 Railway 建置日誌
 
-## 🤝 貢獻
+### 日誌查看
+在 Railway Dashboard 中可以查看即時日誌來診斷問題。
 
-歡迎提交 Issue 和 Pull Request！
+## 📊 監控與維護
 
-## 📄 授權
+### 健康檢查
+機器人啟動時會在控制台顯示狀態訊息，可透過 Railway 日誌監控。
 
-MIT License
-
-## 🙏 致謝
-
-感謝所有為此專案做出貢獻的人，願上帝賜福您的服事！
+### 擴展功能
+- 可以加入更多指令
+- 支援多個向量資料庫
+- 加入使用統計
+- 自定義回應格式
