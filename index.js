@@ -15,8 +15,11 @@ const client = new Client({
   ],
 });
 
-// 你的向量資料庫 ID
-const VECTOR_STORE_ID = 'pmpt_687768773ff08197b43cd4019dea57350c6d0ed08a1126d1';
+// 你的向量資料庫 IDs
+const VECTOR_STORE_IDS = [
+  'vs_68807d717dec81918784b11f7b7aad80',
+  'vs_6875bbd3e120819188d4f563f9ff1f90'
+];
 
 // 機器人就緒事件
 client.once('ready', () => {
@@ -52,23 +55,25 @@ client.on('messageCreate', async (message) => {
     // 創建助手來使用向量搜索
     const assistant = await openai.beta.assistants.create({
       model: 'gpt-4o-mini',
-      name: 'RAG Assistant',
-      instructions: `你是一個專業的助手，只能根據提供的知識庫資料來回答問題。
+      name: 'Theology RAG Assistant',
+      instructions: `你是一個專業的神學助手，只能根據提供的知識庫資料來回答問題。
 
 重要規則：
 1. 只使用檢索到的資料來回答問題
-2. 如果資料庫中沒有相關資訊，請明確說明「很抱歉，我在資料庫中找不到相關資訊」
-3. 必須在回答末尾附上資料來源
+2. 如果資料庫中沒有相關資訊，請明確說明「很抱歉，我在資料庫中找不到相關資訊來回答這個問題」
+3. 必須在回答末尾附上「📚 資料來源：神學知識庫」
 4. 回答要準確、簡潔且有幫助
 5. 使用繁體中文回答
+6. 專注於提供基於資料庫內容的準確資訊
 
 格式要求：
-- 回答問題內容
-- 在末尾加上「📚 資料來源：向量資料庫」`,
+- 直接回答問題內容
+- 引用相關的資料片段（如果有的話）
+- 在末尾加上「📚 資料來源：神學知識庫」`,
       tools: [{ type: 'file_search' }],
       tool_resources: {
         file_search: {
-          vector_store_ids: [VECTOR_STORE_ID]
+          vector_store_ids: VECTOR_STORE_IDS
         }
       }
     });
@@ -87,15 +92,28 @@ client.on('messageCreate', async (message) => {
       assistant_id: assistant.id
     });
 
-    // 等待完成
+    // 等待完成 - 改良版等待機制
     let runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-    while (runStatus.status !== 'completed' && runStatus.status !== 'failed') {
+    let attempts = 0;
+    const maxAttempts = 30; // 最多等待 30 秒
+
+    while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
+      attempts++;
+      
+      // 更新狀態訊息
+      if (attempts % 5 === 0) {
+        await thinkingMessage.edit('🔍 深度搜索資料庫中...');
+      }
     }
 
     if (runStatus.status === 'failed') {
-      throw new Error('Assistant run failed');
+      throw new Error(`Assistant run failed: ${runStatus.last_error?.message || 'Unknown error'}`);
+    }
+
+    if (attempts >= maxAttempts) {
+      throw new Error('Request timeout - please try again');
     }
 
     // 獲取回答
@@ -103,15 +121,19 @@ client.on('messageCreate', async (message) => {
     const botAnswer = threadMessages.data[0].content[0].text.value;
 
     // 清理資源
-    await openai.beta.assistants.del(assistant.id);
+    try {
+      await openai.beta.assistants.del(assistant.id);
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup assistant:', cleanupError.message);
+    }
     
     // 創建 Discord Embed
     const embed = new EmbedBuilder()
       .setColor(0x0099FF)
-      .setTitle('📋 查詢結果')
-      .setDescription(botAnswer)
+      .setTitle('📋 神學知識庫查詢結果')
+      .setDescription(botAnswer.length > 4000 ? botAnswer.substring(0, 4000) + '...' : botAnswer)
       .setFooter({ 
-        text: '資料來源：向量資料庫',
+        text: '資料來源：神學向量資料庫',
         iconURL: client.user.displayAvatarURL()
       })
       .setTimestamp();
@@ -125,13 +147,25 @@ client.on('messageCreate', async (message) => {
   } catch (error) {
     console.error('Error processing question:', error);
     
+    let errorMessage = '很抱歉，處理您的問題時發生錯誤，請稍後再試。';
+    
+    if (error.message.includes('timeout')) {
+      errorMessage = '查詢時間過長，請嘗試簡化您的問題或稍後再試。';
+    } else if (error.message.includes('rate limit')) {
+      errorMessage = '目前請求過多，請稍後再試。';
+    }
+    
     const errorEmbed = new EmbedBuilder()
       .setColor(0xFF0000)
       .setTitle('❌ 處理錯誤')
-      .setDescription('很抱歉，處理您的問題時發生錯誤，請稍後再試。')
+      .setDescription(errorMessage)
       .setTimestamp();
 
-    await message.reply({ embeds: [errorEmbed] });
+    try {
+      await message.reply({ embeds: [errorEmbed] });
+    } catch (replyError) {
+      console.error('Failed to send error message:', replyError);
+    }
   }
 });
 
