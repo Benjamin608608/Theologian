@@ -16,9 +16,57 @@ const client = new Client({
 });
 
 // 你的向量資料庫 IDs
-const VECTOR_STORE_IDS = [
-  'vs_68807d717dec81918784b11f7b7aad80'
-];
+const VECTOR_STORES = {
+  primary: 'vs_68807d717dec81918784b11f7b7aad80'
+};
+
+// 選擇向量資料庫的函數
+function selectVectorStore(question) {
+  const keywords = question.toLowerCase();
+  
+  // 如果問題包含特定關鍵字，使用第二個資料庫
+  if (keywords.includes('歷史') || keywords.includes('教會史') || keywords.includes('early church')) {
+    return {
+      id: VECTOR_STORES.secondary,
+      name: '次要資料庫'
+    };
+  }
+  
+  // 默認使用主要資料庫
+  return {
+    id: VECTOR_STORES.primary,
+    name: '主要資料庫'
+  };
+}
+
+// 獲取文件名稱的函數
+async function getFileName(fileId) {
+  try {
+    const file = await openai.files.retrieve(fileId);
+    return file.filename || `檔案-${fileId.substring(0, 8)}`;
+  } catch (error) {
+    console.warn(`無法獲取檔案名稱 ${fileId}:`, error.message);
+    return `檔案-${fileId.substring(0, 8)}`;
+  }
+}
+
+// 解析回答中的引用資訊
+async function parseAnnotations(messageContent) {
+  const sources = new Set();
+  
+  // 檢查 annotations（引用標註）
+  if (messageContent.annotations && messageContent.annotations.length > 0) {
+    for (const annotation of messageContent.annotations) {
+      if (annotation.type === 'file_citation' && annotation.file_citation) {
+        const fileId = annotation.file_citation.file_id;
+        const fileName = await getFileName(fileId);
+        sources.add(fileName);
+      }
+    }
+  }
+  
+  return Array.from(sources);
+}
 
 // 機器人就緒事件
 client.once('ready', () => {
@@ -51,6 +99,9 @@ client.on('messageCreate', async (message) => {
     // 顯示正在處理的訊息
     const thinkingMessage = await message.reply('🤔 讓我查找相關資料...');
 
+    // 選擇合適的向量資料庫
+    const selectedStore = selectVectorStore(question);
+    
     // 創建助手來使用向量搜索
     const assistant = await openai.beta.assistants.create({
       model: 'gpt-4o-mini',
@@ -60,19 +111,19 @@ client.on('messageCreate', async (message) => {
 重要規則：
 1. 只使用檢索到的資料來回答問題
 2. 如果資料庫中沒有相關資訊，請明確說明「很抱歉，我在資料庫中找不到相關資訊來回答這個問題」
-3. 必須在回答末尾附上「📚 資料來源：神學知識庫」
-4. 回答要準確、簡潔且有幫助
-5. 使用繁體中文回答
-6. 專注於提供基於資料庫內容的準確資訊
+3. 回答要準確、簡潔且有幫助
+4. 使用繁體中文回答
+5. 專注於提供基於資料庫內容的準確資訊
+6. 盡可能引用具體的資料片段
 
 格式要求：
 - 直接回答問題內容
 - 引用相關的資料片段（如果有的話）
-- 在末尾加上「📚 資料來源：神學知識庫」`,
+- 不需要在回答中手動添加資料來源，系統會自動處理`,
       tools: [{ type: 'file_search' }],
       tool_resources: {
         file_search: {
-          vector_store_ids: VECTOR_STORE_IDS
+          vector_store_ids: [selectedStore.id]
         }
       }
     });
@@ -117,7 +168,31 @@ client.on('messageCreate', async (message) => {
 
     // 獲取回答
     const threadMessages = await openai.beta.threads.messages.list(thread.id);
-    const botAnswer = threadMessages.data[0].content[0].text.value;
+    const responseMessage = threadMessages.data[0];
+    
+    // 提取文字內容
+    let botAnswer = '';
+    if (responseMessage.content && responseMessage.content.length > 0) {
+      const textContent = responseMessage.content.find(content => content.type === 'text');
+      if (textContent) {
+        botAnswer = textContent.text.value;
+        
+        // 解析引用的文件來源
+        const sources = await parseAnnotations(textContent.text);
+        
+        // 添加資料來源資訊
+        if (sources.length > 0) {
+          botAnswer += `\n\n📚 **資料來源：**\n${sources.map(source => `• ${source}`).join('\n')}`;
+        } else {
+          botAnswer += `\n\n📚 **資料來源：** ${selectedStore.name}`;
+        }
+      }
+    }
+
+    // 如果沒有獲取到回答
+    if (!botAnswer) {
+      botAnswer = '很抱歉，我在資料庫中找不到相關資訊來回答這個問題。';
+    }
 
     // 清理資源
     try {
@@ -132,7 +207,7 @@ client.on('messageCreate', async (message) => {
       .setTitle('📋 神學知識庫查詢結果')
       .setDescription(botAnswer.length > 4000 ? botAnswer.substring(0, 4000) + '...' : botAnswer)
       .setFooter({ 
-        text: '資料來源：神學向量資料庫',
+        text: `搜索於：${selectedStore.name}`,
         iconURL: client.user.displayAvatarURL()
       })
       .setTimestamp();
