@@ -99,8 +99,8 @@ client.on('messageCreate', async (message) => {
     }
 
     // 獲取回答
-    const messages = await openai.beta.threads.messages.list(thread.id);
-    const answer = messages.data[0].content[0].text.value;
+    const threadMessages = await openai.beta.threads.messages.list(thread.id);
+    const answer = threadMessages.data[0].content[0].text.value;
 
     // 清理資源
     await openai.beta.assistants.del(assistant.id);
