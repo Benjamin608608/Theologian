@@ -38,34 +38,41 @@ async function getFileName(fileId) {
 async function processAnnotationsInText(text, annotations) {
   let processedText = text;
   const sourceMap = new Map();
+  const usedSources = new Map(); // 追蹤已使用的來源，避免重複
+  let citationCounter = 1;
   
   if (annotations && annotations.length > 0) {
-    // 為每個引用創建映射
-    for (let i = 0; i < annotations.length; i++) {
-      const annotation = annotations[i];
+    // 先處理所有引用，按照出現順序編號
+    for (const annotation of annotations) {
       if (annotation.type === 'file_citation' && annotation.file_citation) {
         const fileId = annotation.file_citation.file_id;
         const fileName = await getFileName(fileId);
         const quote = annotation.file_citation.quote || '';
         
-        // 儲存來源資訊
-        sourceMap.set(i + 1, {
-          fileName,
-          quote,
-          fileId
-        });
+        // 檢查是否已經有這個文件的引用
+        let citationIndex;
+        if (usedSources.has(fileId)) {
+          citationIndex = usedSources.get(fileId);
+        } else {
+          citationIndex = citationCounter++;
+          usedSources.set(fileId, citationIndex);
+          sourceMap.set(citationIndex, {
+            fileName,
+            quote,
+            fileId
+          });
+        }
         
-        // 替換原始標記為更友好的格式
+        // 替換原始標記
         const originalText = annotation.text;
         if (originalText) {
-          // 將引用標記轉換為方括號數字（Discord 友好格式）
-          const replacement = `${originalText}[${i + 1}]`;
+          const replacement = `${originalText}[${citationIndex}]`;
           processedText = processedText.replace(originalText, replacement);
         }
       }
     }
     
-    // 清理格式問題
+    // 清理格式問題並改善排版
     processedText = processedText
       // 移除多餘的引用標記格式
       .replace(/【[^】]*】/g, '')
@@ -73,10 +80,14 @@ async function processAnnotationsInText(text, annotations) {
       // 清理多餘的逗號和換行
       .replace(/,\s*\n/g, '\n')
       .replace(/,\s*$/, '')
-      // 清理多重空白和換行
       .replace(/\n\s*,/g, '\n')
+      // 改善段落結構
+      .replace(/(\d+\.\s*[^：]+：)/g, '\n\n**$1**')  // 數字標題加粗
+      .replace(/([。！？])\s*(\d+\.)/g, '$1\n\n**$2')  // 在數字點前加換行
+      .replace(/\*\s*([^*]+)\s*：/g, '• **$1：**')     // 子項目格式化
+      // 清理多重空白和換行
       .replace(/\s+/g, ' ')
-      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/\n\s*\n\s*\n+/g, '\n\n')
       .trim();
   }
   
@@ -88,12 +99,16 @@ function createSourceList(sourceMap) {
   if (sourceMap.size === 0) return '';
   
   let sourceList = '\n\n📚 **引用來源：**\n';
-  sourceMap.forEach((source, index) => {
+  
+  // 按照編號順序排列
+  const sortedSources = Array.from(sourceMap.entries()).sort((a, b) => a[0] - b[0]);
+  
+  sortedSources.forEach(([index, source]) => {
     sourceList += `**[${index}]** ${source.fileName}`;
     if (source.quote && source.quote.length > 0) {
       // 顯示引用片段（限制長度）
-      const shortQuote = source.quote.length > 100 
-        ? source.quote.substring(0, 100) + '...' 
+      const shortQuote = source.quote.length > 120 
+        ? source.quote.substring(0, 120) + '...' 
         : source.quote;
       sourceList += `\n    └ *"${shortQuote}"*`;
     }
