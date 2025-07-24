@@ -15,35 +15,19 @@ const client = new Client({
   ],
 });
 
-// 你的向量資料庫 IDs
-const VECTOR_STORES = {
-  primary: 'vs_68807d717dec81918784b11f7b7aad80'
-};
-
-// 選擇向量資料庫的函數
-function selectVectorStore(question) {
-  const keywords = question.toLowerCase();
-  
-  // 如果問題包含特定關鍵字，使用第二個資料庫
-  if (keywords.includes('歷史') || keywords.includes('教會史') || keywords.includes('early church')) {
-    return {
-      id: VECTOR_STORES.secondary,
-      name: '次要資料庫'
-    };
-  }
-  
-  // 默認使用主要資料庫
-  return {
-    id: VECTOR_STORES.primary,
-    name: '主要資料庫'
-  };
-}
+// 你的向量資料庫 ID
+const VECTOR_STORE_ID = 'vs_68807d717dec81918784b11f7b7aad80';
 
 // 獲取文件名稱的函數
 async function getFileName(fileId) {
   try {
     const file = await openai.files.retrieve(fileId);
-    return file.filename || `檔案-${fileId.substring(0, 8)}`;
+    let fileName = file.filename || `檔案-${fileId.substring(0, 8)}`;
+    
+    // 移除副檔名
+    fileName = fileName.replace(/\.(txt|pdf|docx?|rtf|md)$/i, '');
+    
+    return fileName;
   } catch (error) {
     console.warn(`無法獲取檔案名稱 ${fileId}:`, error.message);
     return `檔案-${fileId.substring(0, 8)}`;
@@ -167,9 +151,6 @@ client.on('messageCreate', async (message) => {
   try {
     // 顯示正在處理的訊息
     const thinkingMessage = await message.reply('🤔 讓我查找相關資料...');
-
-    // 選擇合適的向量資料庫
-    const selectedStore = selectVectorStore(question);
     
     // 創建助手來使用向量搜索
     const assistant = await openai.beta.assistants.create({
@@ -192,7 +173,7 @@ client.on('messageCreate', async (message) => {
       tools: [{ type: 'file_search' }],
       tool_resources: {
         file_search: {
-          vector_store_ids: [selectedStore.id]
+          vector_store_ids: [VECTOR_STORE_ID]
         }
       }
     });
@@ -282,7 +263,7 @@ client.on('messageCreate', async (message) => {
       .setTitle('📋 神學知識庫查詢結果')
       .setDescription(botAnswer.length > 4000 ? botAnswer.substring(0, 4000) + '...' : botAnswer)
       .setFooter({ 
-        text: `搜索於：${selectedStore.name}`,
+        text: '資料來源：神學知識庫',
         iconURL: client.user.displayAvatarURL()
       })
       .setTimestamp();
