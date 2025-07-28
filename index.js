@@ -16,7 +16,7 @@ const client = new Client({
 });
 
 // 你的向量資料庫 ID
-const VECTOR_STORE_ID = 'vs_68807d717dec81918784b11f7b7aad80';
+const VECTOR_STORE_ID = 'vs_6886f711eda0819189b6c017d6b96d23';
 
 // 獲取文件名稱的函數
 async function getFileName(fileId) {
